@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Terapêutico com Dra. Silva</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h2>Chat Terapêutico com Dra. Silva</h2>
+    <div id="chat"></div>
+
+    <div class="input-area">
+      <input type="text" id="mensagem" placeholder="Digite sua mensagem...">
+      <button onclick="enviarTexto()">Enviar</button>
+      <button onclick="toggleGravacao()" id="btnMicrofone">🎤</button>
+    </div>
+
+    <div id="indicadorFalando">Dra. Silva está falando...</div>
+  </div>
+
+  <script>
+    let recognition;
+    let escutando = false;
+    let falando = false;
+
+    const botaoMicrofone = document.getElementById("btnMicrofone");
+    const indicadorFalando = document.getElementById("indicadorFalando");
+
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = function(event) {
+        const resultado = event.results[0][0].transcript.trim();
+        enviarMensagem(resultado);
+      };
+
+      recognition.onend = function() {
+        if (escutando && !falando) {
+          recognition.start();
+          atualizarIconeMicrofone(true);
+        }
+      };
+    } else {
+      alert("Seu navegador não suporta reconhecimento de voz.");
+    }
+
+    function toggleGravacao() {
+      if (!escutando) {
+        escutando = true;
+        recognition.start();
+        atualizarIconeMicrofone(true);
+      } else {
+        escutando = false;
+        recognition.stop();
+        atualizarIconeMicrofone(false);
+      }
+    }
+
+    function atualizarIconeMicrofone(ativo) {
+      botaoMicrofone.style.backgroundColor = ativo ? "#356859" : "";
+      botaoMicrofone.style.color = ativo ? "white" : "";
+    }
+
+    function enviarTexto() {
+      const mensagem = document.getElementById('mensagem').value;
+      if (mensagem.trim()) {
+        enviarMensagem(mensagem);
+      }
+    }
+
+    async function enviarMensagem(mensagem) {
+      const chat = document.getElementById("chat");
+      chat.innerHTML += `
+        <div class="msg usuario">
+          <div>${mensagem}</div>
+        </div>
+      `;
+      document.getElementById("mensagem").value = "";
+
+      falando = true;
+      recognition?.stop();
+      atualizarIconeMicrofone(false);
+      indicadorFalando.style.display = "block";
+
+      const resposta = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem })
+      });
+
+      const dados = await resposta.json();
+
+      chat.innerHTML += `
+        <div class="msg dra">
+          <div>${dados.resposta}</div>
+        </div>
+      `;
+
+      chat.scrollTop = chat.scrollHeight;
+
+      falar(dados.resposta);
+    }
+
+    function falar(texto) {
+      const synth = window.speechSynthesis;
+      const utterThis = new SpeechSynthesisUtterance(texto);
+      utterThis.lang = 'pt-BR';
+
+      utterThis.onstart = () => {
+        falando = true;
+        indicadorFalando.style.display = "block";
+      };
+
+      utterThis.onend = () => {
+        falando = false;
+        indicadorFalando.style.display = "none";
+        if (escutando) {
+          recognition?.start();
+          atualizarIconeMicrofone(true);
+        }
+      };
+
+      synth.speak(utterThis);
+    }
+  </script>
+</body>
+</html>
